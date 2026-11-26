@@ -13,6 +13,7 @@
 #include "audio.h"
 #include "relay_client.h"
 #include "alarms.h"
+#include "faces.h"
 
 enum class Mode { PROVISIONING, CONNECTING, IDLE, LISTENING, THINKING, SPEAKING, ERROR_ };
 volatile Mode mode = Mode::IDLE;
@@ -58,7 +59,7 @@ static void alarm_stop(bool greet) {
 }
 // ---- Tap: dismiss an alarm, interrupt Charlie, or start talking ----
 static void handle_tap() {
-  if (alarmRinging) { alarm_stop(true); return; }
+  if (alarmRinging) { alarm_stop(ringLabel != "timer"); return; }   // alarm: Charlie says good morning; timer: just stop
   if (mode == Mode::LISTENING || mode == Mode::THINKING || mode == Mode::SPEAKING || audio_playing()) {
     Serial.println("[tap] interrupt");
     relay_cancel(); audio_flush_playback();
@@ -107,6 +108,10 @@ void loop() {
     char c = Serial.read();
     if (c == '\n') { cmd.trim(); if (cmd.length()) { net_serial_command(cmd); audio_debug_command(cmd); if (cmd == "TALK") { Serial.println("[talk] simulated wake"); onWake(); }
       if (cmd == "TAP") handle_tap();
+      if (cmd.startsWith("TIMER ")) { faces_timer_set(cmd.substring(6).toInt()); ui_show_face(FACE_TIMER); relay_send_timer(); }
+      if (cmd.startsWith("FACE ")) ui_show_face(cmd.substring(5).toInt());
+      if (cmd == "SHOT") faces_dump();
+      if (cmd.startsWith("TALKLEFT ")) ui_set_talk_left(cmd.substring(9).toFloat(), 30);
       if (cmd == "RING") { alarmRinging = true; ringStart = millis(); nextChime = 0; ringLabel = "test"; ui_alarm(true, "test"); } } cmd = ""; }
     else if (cmd.length() < 300) cmd += c;
   }
@@ -144,7 +149,9 @@ void loop() {
   if (ui_tapped()) handle_tap(); // tap: dismiss alarm / interrupt / talk
   if (int sw = ui_swipe()) audio_set_volume_level(audio_volume_level() + sw, true);   // swipe up/down = volume
   { String label;                // alarms: ring until tapped (auto-stop after 10 min)
-    if (!alarmRinging && alarms_due(label)) {
+    bool timerDone = faces_timer_running() && faces_timer_left_ms() <= 0;
+    if (!alarmRinging && timerDone) { faces_timer_cancel(); label = "timer"; relay_send_timer(); }
+    if (!alarmRinging && (timerDone || alarms_due(label))) {
       if (mode != Mode::IDLE) { relay_cancel(); audio_flush_playback(); idlePending = false; setMode(Mode::IDLE); }
       alarmRinging = true; ringStart = millis(); nextChime = 0; ringLabel = label; ui_alarm(true, label.c_str()); relay_send_alarms();
     }

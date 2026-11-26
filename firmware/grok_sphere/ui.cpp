@@ -2,6 +2,8 @@
 #include "ui.h"
 #include "config.h"
 #include "board.h"
+#include "faces.h"
+#include <Preferences.h>
 
 struct LvLock { LvLock() { lvgl_port_lock(0); } ~LvLock() { lvgl_port_unlock(); } };
 #include <math.h>
@@ -12,6 +14,18 @@ static UiState state = UI_IDLE;
 static volatile bool tapped = false;
 static volatile int swipe = 0;          // +1 swipe up (louder), -1 swipe down (quieter)
 static uint32_t cardUntil = 0;
+static int face = FACE_EYES;            // carousel position (saved), shown while idle
+static bool ringing = false;            // alarm/timer ringing: caution panel overrides everything
+
+static void lastDrawnReset();
+// Which view is on screen: the caution panel while ringing, the eyes while Charlie is busy, otherwise the chosen face.
+static void apply_view() {
+  int v = ringing ? FACE_CAUTION : (state != UI_IDLE ? FACE_EYES : face);
+  bool eyes = v == FACE_EYES;
+  for (int i = 0; i < 2; i++) eyes ? lv_obj_clear_flag(eye[i], LV_OBJ_FLAG_HIDDEN) : lv_obj_add_flag(eye[i], LV_OBJ_FLAG_HIDDEN);
+  if (eyes) lastDrawnReset();
+  faces_show(v);
+}
 
 // ---------------- eyes ----------------
 // Each eye is an lv_line with round caps: a stadium ("pill") drawn by LVGL's line renderer. Rotation is just the
@@ -25,6 +39,7 @@ static float pulse = 1, pulseT = 1;                           // speaking loudne
 static uint32_t nextBlink = 0, nextGaze = 0, blinkT0 = 0;
 static bool blinking = false, doubleBlink = false;
 static float lastDrawn[6] = {-1};
+static void lastDrawnReset() { lastDrawn[0] = -1; }
 volatile uint32_t g_ui_frames = 0;                            // eye redraws (status line fps)
 
 static float rnd(float a, float b) { return a + (b - a) * (esp_random() % 10000) / 10000.f; }
@@ -91,6 +106,14 @@ static void on_tap(lv_event_t*) { tapped = true; }
 static void on_gesture(lv_event_t*) {   // swipe up/down on the screen = volume (the side button is inside the case)
   lv_dir_t d = lv_indev_get_gesture_dir(lv_indev_active());
   if (d == LV_DIR_TOP) swipe = +1; else if (d == LV_DIR_BOTTOM) swipe = -1;
+  else if ((d == LV_DIR_LEFT || d == LV_DIR_RIGHT) && state == UI_IDLE && !ringing) {   // left/right = next/previous face
+    face = (face + (d == LV_DIR_LEFT ? 1 : FACE_COUNT - 1)) % FACE_COUNT;
+    Preferences p; p.begin("ui", false); p.putUChar("face", face); p.end();
+    lv_obj_add_flag(card, LV_OBJ_FLAG_HIDDEN); cardUntil = 0;
+    apply_view();
+    lv_indev_wait_release(lv_indev_active());
+    return;
+  }
   if (swipe) lv_indev_wait_release(lv_indev_active());   // don't also count it as a tap
 }
 
@@ -130,6 +153,9 @@ void ui_init() {
     lv_obj_align(dots[i], LV_ALIGN_BOTTOM_MID, (i - 1) * 34, -52);
     lv_obj_add_flag(dots[i], LV_OBJ_FLAG_HIDDEN);
   }
+  faces_init(scr);                                 // watch faces canvas (above the eyes, below the card)
+  { Preferences p; p.begin("ui", true); face = p.getUChar("face", FACE_EYES) % FACE_COUNT; p.end(); }
+
   lblTitle = lv_label_create(scr);                 // small status pill text under the eyes
   lv_obj_set_style_text_color(lblTitle, lv_color_hex(0x39FF14), 0);
   lv_obj_set_style_text_font(lblTitle, &lv_font_montserrat_20, 0);
@@ -167,6 +193,7 @@ void ui_set_state(UiState s) {
     lv_label_set_text_fmt(lblPortal, "Join Wi-Fi\n%s%s\nto set me up", PORTAL_SSID_PREFIX, id.substring(0, 4).c_str());
   }
   else lv_label_set_text(lblPortal, "");
+  apply_view();
 }
 
 void ui_set_speaking_level(uint8_t lvl) {
@@ -188,22 +215,18 @@ void ui_loop() {
     strftime(b, sizeof b, "%a %b %-d", &t); lv_label_set_text(lblDate, b);
   }
   if (cardUntil && now > cardUntil) { cardUntil = 0; lv_obj_add_flag(card, LV_OBJ_FLAG_HIDDEN); }
+  faces_tick();
 }
 
 void ui_show_card(uint32_t ms) { LvLock lk; lv_obj_clear_flag(card, LV_OBJ_FLAG_HIDDEN); cardUntil = millis() + ms; }
 
-// Alarm ringing: hold the clock card on screen with the label, amber ring.
-void ui_alarm(bool ringing, const char* label) {
+// Alarm or timer ringing: the Huey caution panel (WAKE UP / TIME UP, flashing MASTER CAUTION). Tap = press to reset.
+void ui_alarm(bool ring, const char* label) {
   LvLock lk;
-  if (ringing) {
-    lv_label_set_text_fmt(lblWx, "ALARM%s%s", (label && *label) ? "  " : "", label ? label : "");
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_HIDDEN); cardUntil = 0;
-    lv_obj_set_style_border_color(ring, lv_color_hex(0xFFB020), 0);
-    lv_obj_clear_flag(ring, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(ring);
-  } else {
-    lv_obj_add_flag(card, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_border_color(ring, lv_color_hex(0x39FF14), 0);
-    if (state != UI_LISTENING) lv_obj_add_flag(ring, LV_OBJ_FLAG_HIDDEN);
-    lv_label_set_text(lblWx, "");
-  }
+  ringing = ring;
+  faces_set_caution(label && !strcmp(label, "timer"));
+  if (ring) { lv_obj_add_flag(card, LV_OBJ_FLAG_HIDDEN); cardUntil = 0; }
+  apply_view();
 }
+void ui_show_face(int f) { LvLock lk; if (f >= 0 && f < FACE_COUNT) { face = f; apply_view(); } }
+void ui_set_talk_left(float minutes, float limit) { LvLock lk; faces_set_talk_left(minutes, limit); }

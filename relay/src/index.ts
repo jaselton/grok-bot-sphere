@@ -60,6 +60,11 @@ function localNow(env: Env): string {
   return new Date().toLocaleString("en-US", { timeZone: env.TIMEZONE || "America/Chicago", weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function say(secs: number): string {   // 750 -> "12 minutes 30 seconds"
+  const h = Math.floor(secs / 3600), m = Math.floor(secs / 60) % 60, s = secs % 60, part = (n: number, u: string) => n ? `${n} ${u}${n === 1 ? "" : "s"}` : "";
+  return [part(h, "hour"), part(m, "minute"), part(s, "second")].filter(Boolean).join(" ") || "0 seconds";
+}
+
 // Legacy budget DO from v1 (no longer used; the Device DO keeps its own budget).
 export class Budget extends DurableObject<Env> {}
 
@@ -143,7 +148,8 @@ export class Device extends DurableObject<Env> {
       return;
     }
     let m: any; try { m = JSON.parse(msg); } catch { return; }
-    if (m.t === "hello") await this.deliverQueuedResult();
+    if (m.t === "hello") { await this.sendUsage(); await this.deliverQueuedResult(); }
+    else if (m.t === "timer") await this.ctx.storage.put("timerEnds", Number(m.left) > 0 ? Date.now() + Number(m.left) * 1000 : 0);
     else if (m.t === "cancel") { if (this.xai) this.closeUpstream("cancelled"); else if (this.outQ.length) { this.dropAudio(); this.idleWhenDrained = false; this.state("idle"); } }   // tap: stop now
     else if (m.t === "alarms" && Array.isArray(m.list)) await this.ctx.storage.put("alarms", m.list.slice(0, 20));
     else if (m.t === "greet" && !this.xai && !this.opening) {
@@ -158,6 +164,11 @@ export class Device extends DurableObject<Env> {
   private async remainingSecs(): Promise<number> {
     const used = (await this.ctx.storage.get<number>("secs:" + this.day())) ?? 0;
     return Math.max(0, Number(this.env.DAILY_MINUTES || "30") * 60 - used);
+  }
+  // Talk minutes left today, for the sphere's Huey "talk quantity" gauge.
+  private async sendUsage() {
+    const limit = Number(this.env.DAILY_MINUTES || "30");
+    this.send(JSON.stringify({ usage: { left: +((await this.remainingSecs()) / 60).toFixed(1), limit } }));
   }
   private async addSecs(s: number) {
     const k = "secs:" + this.day();
@@ -175,6 +186,10 @@ export class Device extends DurableObject<Env> {
       { type: "function", name: "cancel_alarm", description: "Cancel an alarm by time, or all alarms.",
         parameters: { type: "object", properties: { time: { type: "string", description: "HH:MM, or 'all'" } }, required: ["time"] } },
       { type: "function", name: "list_alarms", description: "List the alarms set on the sphere.", parameters: { type: "object", properties: {} } },
+      { type: "function", name: "set_timer", description: "Start a countdown timer on the sphere (one at a time; a new one replaces the old). It shows on the Huey timer face and rings when it runs out.",
+        parameters: { type: "object", properties: { minutes: { type: "number" }, seconds: { type: "number" } } } },
+      { type: "function", name: "cancel_timer", description: "Stop the countdown timer.", parameters: { type: "object", properties: {} } },
+      { type: "function", name: "check_timer", description: "How much time is left on the countdown timer.", parameters: { type: "object", properties: {} } },
       { type: "function", name: "set_volume", description: "Change the sphere's speaker volume (10 levels). Use 'up'/'down' for one step, or 'set' with a level 1-10 (6 is normal).",
         parameters: { type: "object", properties: { change: { type: "string", enum: ["up", "down", "set"] }, level: { type: "integer", minimum: 1, maximum: 10 } }, required: ["change"] } },
     ];
@@ -235,7 +250,7 @@ export class Device extends DurableObject<Env> {
     if (this.closeTimer) { clearTimeout(this.closeTimer); this.closeTimer = null; }
     if (this.guard) { clearInterval(this.guard); this.guard = null; }
     console.log(JSON.stringify({ ev: "session_end", reason, secs, queued_ms: Math.round(this.outQBytes / (OUT_RATE * 2 / 1000)) }));
-    this.ctx.waitUntil(this.addSecs(secs).then(() => this.deliverQueuedResult()));
+    this.ctx.waitUntil(this.addSecs(secs).then(() => this.sendUsage()).then(() => this.deliverQueuedResult()));
     if (reason === "cancelled" || reason.startsWith("device") || !this.outQ.length) { this.dropAudio(); this.state("idle"); }
     else this.idleWhenDrained = true;        // finish sending the reply first; "idle" goes out after the last audio
   }
@@ -300,6 +315,18 @@ export class Device extends DurableObject<Env> {
     if (name === "list_alarms") {
       const list = (await this.ctx.storage.get<Alarm[]>("alarms")) ?? [];
       return list.length ? "Alarms: " + list.map(x => x.time + (x.label ? " " + x.label : "")).join(", ") + "." : "No alarms are set.";
+    }
+    if (name === "set_timer") {
+      const secs = Math.round((Number(a.minutes) || 0) * 60 + (Number(a.seconds) || 0));
+      if (secs < 1 || secs > 24 * 3600) return "Timers can run from one second to 24 hours.";
+      this.send(JSON.stringify({ timer: { op: "set", secs } }));
+      await this.ctx.storage.put("timerEnds", Date.now() + secs * 1000);
+      return `Timer started for ${say(secs)}.`;
+    }
+    if (name === "cancel_timer") { this.send(JSON.stringify({ timer: { op: "cancel" } })); await this.ctx.storage.put("timerEnds", 0); return "Timer cancelled."; }
+    if (name === "check_timer") {
+      const ends = (await this.ctx.storage.get<number>("timerEnds")) ?? 0, left = Math.round((ends - Date.now()) / 1000);
+      return left > 0 ? `${say(left)} left on the timer.` : "No timer is running.";
     }
     if (name === "set_volume") {
       const op = ["up", "down", "set"].includes(a.change) ? a.change : "down";

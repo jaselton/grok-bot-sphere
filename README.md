@@ -18,6 +18,10 @@ the assistant is called **Charlie**, a chief of staff.
 - **Interrupt:** tap while Charlie is talking and it stops at once (the paid session ends too).
 - **Alarms:** "wake me at 6:30". Alarms are kept on the board across reboots. It chimes until you tap, then Charlie
   says good morning with the time and weather.
+- **Watch faces:** swipe left or right to switch the eyes for a dive chronograph, a UH-1 Huey-style countdown timer
+  ("set a timer for 12 minutes"), a Huey fuel-gauge-style "talk quantity" gauge (voice minutes left today) and a
+  '67 big-block stinger-hood clock. Alarms and timers ring on a Huey caution panel: tap MASTER CAUTION to reset.
+  The dial art is baked by `tools/make_face_assets.py`; hands and digits are drawn live (`faces.cpp`).
 - **Volume:** 10 levels, saved on the board. Swipe up or down on the screen, say "turn it down", or use the upper side
   button (BOOT) when the case is open.
 - **Time and weather** for your home, from Open-Meteo (no key needed).
@@ -35,7 +39,7 @@ the assistant is called **Charlie**, a chief of staff.
 | `firmware/grok_sphere` | Arduino-ESP32 3.3 sketch: LVGL eyes, audio path, relay client, alarms, wake word. Build notes in `README_BUILD.md`. |
 | `relay` | Cloudflare Worker + Durable Object between the sphere and xAI. It holds the API key, paces audio, enforces a daily budget and handles the tools. |
 | `case` | OpenSCAD enclosure (`grok_sphere.scad`) and print-ready STLs: one-piece body, twist-lock bezel, twist-lock base. See `case/README.md`. |
-| `tools` | `sphere-wifi.sh` sets Wi-Fi over USB. `wake_speaker_test.py` is a peak-based wake-word speaker test. |
+| `tools` | `sphere-wifi.sh` sets Wi-Fi over USB. `wake_speaker_test.py` is a peak-based wake-word speaker test. `render_*.py` + `make_face_assets.py` draw and bake the watch faces; `face_shots.py` captures them from the device. |
 
 ## Hardware
 
