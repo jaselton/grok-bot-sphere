@@ -21,15 +21,23 @@ extern "C" {
 
 static const char* TAG = "audio";
 
+// ---- volume: 5 levels (ES8311 0-100 scale), saved in NVS; side button / voice / serial step it ----
+#include <Preferences.h>
+static const int VOLUME_LEVELS[] = { 45, 55, 65, 75, 85 };   // ~3 dB apart; default level 2 (65) is quieter than before (80)
+static const int VOLUME_COUNT = sizeof(VOLUME_LEVELS) / sizeof(VOLUME_LEVELS[0]);
+static int volLevel = 2;
+static es8311_handle_t spk = nullptr;
+
 // ES8311 (speaker DAC) setup, from Waveshare demo 03_audio_out_no_tf, at our 16 kHz rate.
 static esp_err_t es8311_codec_init() {
   es8311_handle_t h = es8311_create(I2C_NUM_0, ES8311_ADDRRES_0);
+  spk = h;
   ESP_RETURN_ON_FALSE(h, ESP_FAIL, TAG, "es8311 create failed");
   const es8311_clock_config_t clk = {
     .mclk_inverted = false, .sclk_inverted = false, .mclk_from_mclk_pin = true,
     .mclk_frequency = CODEC_RATE * 256, .sample_frequency = CODEC_RATE };
   ESP_RETURN_ON_ERROR(es8311_init(h, &clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16), TAG, "es8311 init failed");
-  ESP_RETURN_ON_ERROR(es8311_voice_volume_set(h, 80, NULL), TAG, "es8311 volume failed");
+  ESP_RETURN_ON_ERROR(es8311_voice_volume_set(h, VOLUME_LEVELS[volLevel], NULL), TAG, "es8311 volume failed");
   ESP_RETURN_ON_ERROR(es8311_microphone_config(h, false), TAG, "es8311 mic config failed");
   return ESP_OK;
 }
@@ -187,7 +195,18 @@ static void mic_task(void*) {
     }
   }
 }
+static void volume_load() { Preferences p; p.begin("audio", true); volLevel = constrain((int)p.getUChar("vol", 2), 0, VOLUME_COUNT - 1); p.end(); }
+int audio_volume_level() { return volLevel; }
+int audio_volume_levels() { return VOLUME_COUNT; }
+void audio_set_volume_level(int lvl, bool chime) {
+  volLevel = constrain(lvl, 0, VOLUME_COUNT - 1);
+  if (spk) es8311_voice_volume_set(spk, VOLUME_LEVELS[volLevel], NULL);
+  Preferences p; p.begin("audio", false); p.putUChar("vol", volLevel); p.end();
+  Serial.printf("[audio] volume level %d/%d (%d)\n", volLevel + 1, VOLUME_COUNT, VOLUME_LEVELS[volLevel]);
+  if (chime) audio_chime(2);
+}
 void audio_init() {
+  volume_load();
   design_lowpass(upH, UP_TAPS, 11000.f / CODEC_RATE);
   design_lowpass(dnH, DN_TAPS, 6000.f / CODEC_RATE);   // 6 kHz: well clear of the 8 kHz fold (7 kHz aliased hiss into 7-8 kHz)
   design_eq(CODEC_RATE);
@@ -234,6 +253,7 @@ void audio_chime(int kind) {                      // 0 = result ready (two risin
   if (!buf) return;
   int pos = 0;
   if (kind == 1) { tone(1318.5f, 180, 9000, buf, pos); tone(1568.0f, 180, 9000, buf, pos); tone(2093.0f, 320, 9000, buf, pos); }
+  else if (kind == 2) { tone(1760.0f, 140, 8000, buf, pos); }                 // volume tick
   else           { tone(1046.5f, 160, 7000, buf, pos); tone(1568.0f, 300, 7000, buf, pos); }
   for (int i = 0; i < SPK_RATE / 8; i++) buf[pos++] = 0;                  // short tail of silence
   streamEnded = true;                                                    // play immediately, no jitter wait
@@ -351,6 +371,7 @@ void audio_debug_command(const String& c) {
   } else if (c == "WAKETEST OFF") { tflm_wake_test_mode(false);
   } else if (c == "WAKE?") { float l, p, cu; tflm_wake_stats(l, p, cu); Serial.printf("[wake] last %.2f peak %.2f cutoff %.2f\n", l, p, cu);
 #endif
+  } else if (c.startsWith("VOL ")) { audio_set_volume_level(c.substring(4).toInt() - 1, true);
   } else if (c == "CHIME") { audio_chime(0);
   } else if (c == "AUDIO?") {
     Serial.printf("[audio] i2s wrote %lu, queued %ld, busy %d, PA_EN=%d\n", (unsigned long)i2sWritten.load(), (long)queuedBytes.load(), (int)playBusy, digitalRead(PIN_PA_EN));

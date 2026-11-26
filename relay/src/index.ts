@@ -175,6 +175,8 @@ export class Device extends DurableObject<Env> {
       { type: "function", name: "cancel_alarm", description: "Cancel an alarm by time, or all alarms.",
         parameters: { type: "object", properties: { time: { type: "string", description: "HH:MM, or 'all'" } }, required: ["time"] } },
       { type: "function", name: "list_alarms", description: "List the alarms set on the sphere.", parameters: { type: "object", properties: {} } },
+      { type: "function", name: "set_volume", description: "Change the sphere's speaker volume (5 levels). Use 'up'/'down' for relative changes, or a level 1-5.",
+        parameters: { type: "object", properties: { change: { type: "string", enum: ["up", "down", "set"] }, level: { type: "integer", minimum: 1, maximum: 5 } }, required: ["change"] } },
     ];
     if (this.canDelegate())
       t.push({ type: "function", name: "delegate_to_charlie", description: "Hand a bigger job to the owner's Grok Bot (calendar, email, reminders, research). The answer comes back later.",
@@ -298,6 +300,12 @@ export class Device extends DurableObject<Env> {
     if (name === "list_alarms") {
       const list = (await this.ctx.storage.get<Alarm[]>("alarms")) ?? [];
       return list.length ? "Alarms: " + list.map(x => x.time + (x.label ? " " + x.label : "")).join(", ") + "." : "No alarms are set.";
+    }
+    if (name === "set_volume") {
+      const op = ["up", "down", "set"].includes(a.change) ? a.change : "down";
+      const level = Math.min(5, Math.max(1, Number(a.level) || 3));
+      this.send(JSON.stringify({ volume: { op, level } }));
+      return op === "set" ? `Volume set to ${level} of 5.` : `Volume turned ${op}.`;
     }
     if (name === "delegate_to_charlie") return this.delegate(String(a.task || "").slice(0, MAX_TEXT));
     return "Unknown tool.";

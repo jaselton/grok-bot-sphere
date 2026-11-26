@@ -18,6 +18,8 @@ the assistant is called **Charlie**, a chief of staff.
 - **Interrupt:** tap while Charlie is talking and it stops at once (the paid session ends too).
 - **Alarms:** "wake me at 6:30". Alarms are kept on the board across reboots. It chimes until you tap, then Charlie
   says good morning with the time and weather.
+- **Volume:** 5 levels, saved on the board. Swipe up or down on the screen, say "turn it down", or use the upper side
+  button (BOOT) when the case is open.
 - **Time and weather** for your home, from Open-Meteo (no key needed).
 - **Optional Grok Bot hand-off:** bigger jobs (calendar, email, reminders) go to *your own* Grok Bot through a
   webhook routine. The answer comes back to the sphere, which chimes and reads it out. This is off until you add the

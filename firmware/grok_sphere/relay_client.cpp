@@ -28,6 +28,12 @@ static void onEvent(WStype_t t, uint8_t* p, size_t len) {
       JsonDocument d; if (deserializeJson(d, p, len)) break;
       if (d["state"].is<const char*>()) { if (!strcmp(d["state"], "idle")) dropRx = false; onRelayState(d["state"]); }
       if (d["chime"].is<const char*>()) audio_chime(0);
+      if (d["volume"].is<JsonObject>()) {
+        const char* op = d["volume"]["op"] | "";
+        int lvl = audio_volume_level();
+        if (!strcmp(op, "up")) lvl++; else if (!strcmp(op, "down")) lvl--; else if (!strcmp(op, "set")) lvl = (d["volume"]["level"] | 3) - 1;
+        audio_set_volume_level(lvl, false);
+      }
       if (d["alarm"].is<JsonObject>()) { alarms_apply(d["alarm"]["op"] | "", d["alarm"]["time"] | "", d["alarm"]["label"] | ""); relay_send_alarms(); }
       if (d["card"].is<const char*>())  ui_show_card(6000);
       if (d["wx"].is<const char*>())    ui_set_weather(d["wx"], d["f"] | 0);

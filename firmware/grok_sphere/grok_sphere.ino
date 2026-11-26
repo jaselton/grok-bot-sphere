@@ -80,6 +80,7 @@ void setup() {
   if (wipe) net_wipe_wifi();
   audio_init();                  // ES8311 + ES7210 + I2S duplex at 48 kHz, PA enable
   alarms_init();
+  pinMode(PIN_BOOT, INPUT_PULLUP);   // side button = volume
   if (!net_has_credentials()) {
     setMode(Mode::PROVISIONING);
     net_start_portal();          // SoftAP + DNS + HTTP form; reboots after saving
@@ -126,8 +127,22 @@ void loop() {
     idleSince = 0;
     idlePending = false; relay_end_turn(); setMode(Mode::IDLE); wake_resume();
   }
+  { // side button (BOOT, GPIO0, the UPPER button; the lower one is RESET): short = louder (wraps), long = quieter. Inside the case it is covered, so swipes on the screen do the same.
+    static bool was = false; static uint32_t downAt = 0, lastEdge = 0;
+    bool down = digitalRead(PIN_BOOT) == LOW;
+    if (down != was && millis() - lastEdge > 30) {
+      lastEdge = millis(); was = down;
+      if (down) downAt = millis();
+      else {
+        int lvl = audio_volume_level(), n = audio_volume_levels();
+        if (millis() - downAt > 600) lvl = max(0, lvl - 1); else lvl = (lvl + 1) % n;
+        audio_set_volume_level(lvl, true);
+      }
+    }
+  }
   ui_loop();                     // clock/weather refresh, idle blinking schedule
   if (ui_tapped()) handle_tap(); // tap: dismiss alarm / interrupt / talk
+  if (int sw = ui_swipe()) audio_set_volume_level(audio_volume_level() + sw, true);   // swipe up/down = volume
   { String label;                // alarms: ring until tapped (auto-stop after 10 min)
     if (!alarmRinging && alarms_due(label)) {
       if (mode != Mode::IDLE) { relay_cancel(); audio_flush_playback(); idlePending = false; setMode(Mode::IDLE); }

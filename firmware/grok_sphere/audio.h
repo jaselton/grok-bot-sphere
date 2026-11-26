@@ -9,7 +9,10 @@ void   audio_mic_stream(bool on);       // relay turn: fill the mic ring (true) 
 void   audio_flush_playback();
 void   audio_stream_begin();            // a reply is starting (jitter buffer waits for 500 ms)
 void   audio_stream_end();              // the relay is done: play out what is queued
-void   audio_chime(int kind);           // 0 = result ready, 1 = alarm         // barge-in: drop queued audio
+void   audio_chime(int kind);           // 0 = result ready, 1 = alarm, 2 = volume tick
+int    audio_volume_level();            // 0..levels-1
+int    audio_volume_levels();
+void   audio_set_volume_level(int lvl, bool chime);   // saved in NVS         // barge-in: drop queued audio
 bool   audio_playing();
 uint8_t audio_out_level();             // 0..255 RMS of what is being played
 // Wake word (ESP-SR WakeNet)

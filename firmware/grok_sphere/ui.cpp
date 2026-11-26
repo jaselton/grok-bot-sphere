@@ -10,6 +10,7 @@ struct LvLock { LvLock() { lvgl_port_lock(0); } ~LvLock() { lvgl_port_unlock(); 
 static lv_obj_t *scr, *eye[2], *ring, *lblTitle, *dots[3], *card, *lblTime, *lblDate, *lblWx, *lblPortal;
 static UiState state = UI_IDLE;
 static volatile bool tapped = false;
+static volatile int swipe = 0;          // +1 swipe up (louder), -1 swipe down (quieter)
 static uint32_t cardUntil = 0;
 
 // ---------------- eyes ----------------
@@ -87,6 +88,11 @@ static void eyes_tick(lv_timer_t*) {                           // runs in the LV
   draw_eyes();
 }
 static void on_tap(lv_event_t*) { tapped = true; }
+static void on_gesture(lv_event_t*) {   // swipe up/down on the screen = volume (the side button is inside the case)
+  lv_dir_t d = lv_indev_get_gesture_dir(lv_indev_active());
+  if (d == LV_DIR_TOP) swipe = +1; else if (d == LV_DIR_BOTTOM) swipe = -1;
+  if (swipe) lv_indev_wait_release(lv_indev_active());   // don't also count it as a tap
+}
 
 void ui_init() {
   LvLock lk;
@@ -94,6 +100,7 @@ void ui_init() {
   lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
   lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_event_cb(scr, on_tap, LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(scr, on_gesture, LV_EVENT_GESTURE, NULL);
 
   ring = lv_obj_create(scr);                       // neon ring for LISTENING
   lv_obj_set_size(ring, SCREEN_W - 6, SCREEN_H - 6); lv_obj_center(ring);
@@ -169,6 +176,7 @@ void ui_set_speaking_level(uint8_t lvl) {
 void ui_set_weather(const char* t, int f) { LvLock lk; lv_label_set_text_fmt(lblWx, "%s  %d\xC2\xB0F", t, f); }
 
 bool ui_tapped() { bool t = tapped; tapped = false; return t; }
+int ui_swipe() { int v = swipe; swipe = 0; return v; }
 
 void ui_loop() {
   LvLock lk;
