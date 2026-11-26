@@ -59,7 +59,7 @@ static void alarm_stop(bool greet) {
 }
 // ---- Tap: dismiss an alarm, interrupt Charlie, or start talking ----
 static void handle_tap() {
-  if (alarmRinging) { alarm_stop(ringLabel != "timer"); return; }   // alarm: Charlie says good morning; timer: just stop
+  if (alarmRinging) { alarm_stop(ringLabel != "timer" && ringLabel != "test"); return; }   // alarm: Charlie says good morning; timer: just stop
   if (mode == Mode::LISTENING || mode == Mode::THINKING || mode == Mode::SPEAKING || audio_playing()) {
     Serial.println("[tap] interrupt");
     relay_cancel(); audio_flush_playback();

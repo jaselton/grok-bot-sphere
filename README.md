@@ -20,7 +20,7 @@ the assistant is called **Charlie**, a chief of staff.
   says good morning with the time and weather.
 - **Watch faces:** swipe left or right to switch the eyes for a dive chronograph, a UH-1 Huey-style countdown timer
   ("set a timer for 12 minutes"), a Huey fuel-gauge-style "talk quantity" gauge (voice minutes left today) and a
-  '67 big-block stinger-hood clock. Alarms and timers ring on a Huey caution panel: tap MASTER CAUTION to reset.
+  '67 big-block stinger-hood clock, and a Huey caution panel that sits dark until an alarm or timer lights it: tap MASTER CAUTION to reset.
   The dial art is baked by `tools/make_face_assets.py`; hands and digits are drawn live (`faces.cpp`).
 - **Volume:** 10 levels, saved on the board. Swipe up or down on the screen, say "turn it down", or use the upper side
   button (BOOT) when the case is open.

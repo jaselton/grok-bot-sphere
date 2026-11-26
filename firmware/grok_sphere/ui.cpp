@@ -224,7 +224,7 @@ void ui_show_card(uint32_t ms) { LvLock lk; lv_obj_clear_flag(card, LV_OBJ_FLAG_
 void ui_alarm(bool ring, const char* label) {
   LvLock lk;
   ringing = ring;
-  faces_set_caution(label && !strcmp(label, "timer"));
+  faces_set_caution(ring, label && !strcmp(label, "timer"));
   if (ring) { lv_obj_add_flag(card, LV_OBJ_FLAG_HIDDEN); cardUntil = 0; }
   apply_view();
 }

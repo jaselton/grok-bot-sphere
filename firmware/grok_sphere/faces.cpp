@@ -13,7 +13,7 @@ static const float CX = 180, CY = 180;
 static lv_obj_t* canvas;
 static uint16_t* fb;                 // 360x360 RGB565 (lv_color16_t layout)
 static int shown = FACE_EYES;
-static bool dirty = true, cautionTimer = false;
+static bool dirty = true, cautionTimer = false, cautionRing = false;
 static uint32_t lastKey = 0xFFFFFFFF;
 static float talkLeft = -1, talkLimit = 30;
 static uint32_t cdEnd = 0; static bool timerOn = false;
@@ -177,9 +177,8 @@ static void draw_fuel() {
 static void draw_caution(const struct tm* t, bool lit) {
   decode(face_caution_pal, face_caution_idx);
   uint16_t amber = c565(255, 176, 0), ink = c565(20, 16, 0);
-  rrect(140, 76, 220, 104, 0.5f, amber);
-  sprite(cautionTimer ? spr_timeup : spr_wake, 180, 90, ink);
-  if (lit) { rrect(112, 160, 248, 208, 4, amber); sprite(spr_master, 180, 176, ink); sprite(spr_caution, 180, 195, ink); }
+  if (cautionRing) { rrect(140, 76, 220, 104, 0.5f, amber); sprite(cautionTimer ? spr_timeup : spr_wake, 180, 90, ink); }
+  if (cautionRing && lit) { rrect(112, 160, 248, 208, 4, amber); sprite(spr_master, 180, 176, ink); sprite(spr_caution, 180, 195, ink); }
   if (t) { char b[8]; int h = t->tm_hour % 12; snprintf(b, sizeof b, "%d:%02d", h ? h : 12, t->tm_min); text(font_caution, b, 180, 260, c565(236, 236, 230)); }
 }
 static void draw_stinger(const struct tm& t) {
@@ -216,7 +215,7 @@ void faces_tick() {
   switch (shown) {                                  // redraw only when what's on the face changes
     case FACE_TIMER:   key = timerOn ? (uint32_t)(max<int32_t>(0, faces_timer_left_ms() + 999) / 1000) : 0xFFFF0000; break;
     case FACE_FUEL:    key = (uint32_t)(talkLeft * 10) ^ 0x5A5A0000; break;
-    case FACE_CAUTION: key = (ms % 1000 < 600) | ((haveT ? t.tm_min : 0) << 1) | (cautionTimer << 8); break;
+    case FACE_CAUTION: key = (cautionRing && ms % 1000 < 600) | ((haveT ? t.tm_min : 0) << 1) | (cautionTimer << 8) | (cautionRing << 9); break;
     default:           key = haveT ? (uint32_t)(t.tm_hour * 3600 + t.tm_min * 60 + t.tm_sec) : 0; break;
   }
   if (!dirty && key == lastKey) return;
@@ -235,7 +234,7 @@ void faces_tick() {
   static uint32_t worst = 0; uint32_t us = micros() - t0;
   if (us > worst) { worst = us; Serial.printf("[faces] face %d drawn in %lu us\n", shown, (unsigned long)us); }
 }
-void faces_set_caution(bool timer) { cautionTimer = timer; dirty = true; }
+void faces_set_caution(bool ring, bool timer) { cautionRing = ring; if (ring) cautionTimer = timer; dirty = true; }
 void faces_set_talk_left(float minutes, float limit) { talkLeft = minutes; talkLimit = limit > 0 ? limit : 30; dirty = true; }
 
 void faces_timer_set(uint32_t secs) { cdEnd = millis() + secs * 1000UL; timerOn = secs > 0; dirty = true; }

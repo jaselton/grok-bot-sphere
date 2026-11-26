@@ -18,7 +18,7 @@ def shot(name):
         px[k % 360, k // 360] = ((v >> 11) << 3, ((v >> 5) & 63) << 2, (v & 31) << 3)
     im.save(f"{out}/{name}.png"); print("saved", name)
 log = cmd("TALKLEFT 18.5", 0.5)
-for n, c in [("dive", "FACE 1"), ("timer_idle", "FACE 2"), ("fuel", "FACE 3"), ("stinger", "FACE 4")]:
+for n, c in [("dive", "FACE 1"), ("timer_idle", "FACE 2"), ("fuel", "FACE 3"), ("stinger", "FACE 4"), ("caution_idle", "FACE 5")]:
     log += cmd(c); shot(n)
 log += cmd("FACE 3", 0.5); log += cmd("TALKLEFT 3.2"); shot("fuel_low")
 log += cmd("TIMER 750", 2.5); shot("timer_run")
