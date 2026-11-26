@@ -18,5 +18,5 @@ basename (two `common.cc`, two `kernel_util.cc`) and the link fails with undefin
 `build_opt.h` turns on the ESP-NN S3 kernels (`-DESP_NN -DCONFIG_NN_OPTIMIZED -DARCH_ESP32_S3`).
 The wake-word model (`wake_model.h`) must never be committed: its training data is non-commercial.
 
-Serial debug commands: TALK, TAP, RING, TONE, CHIME, MIC, MICDUMP, AUDIO?, WIFI?, WIFI-FORGET, WAKE?, CUTOFF x,
+Serial debug commands: TALK, TAP, RING, TONE, CHIME, MIC, MICDUMP, AUDIO?, WIFI?, WIFI-FORGET, PORTAL-TEST, WAKE?, CUTOFF x,
 WAKETEST ON|OFF, TIMER secs, FACE n (0 eyes 1 dive 2 timer 3 talk 4 stinger), TALKLEFT min, SHOT (canvas dump; see tools/face_shots.py). Speaker test: `~/dev/sphere-185/tools/wake_speaker_test.py "hey charlie"`.

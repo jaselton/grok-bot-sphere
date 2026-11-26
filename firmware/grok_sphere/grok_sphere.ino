@@ -89,6 +89,13 @@ void setup() {
   }
   Serial.printf("[boot] connecting wifi (internal free %u, largest %u)\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   net_connect_blocking(20000);
+  if (!net_connected()) {        // saved Wi-Fi unreachable (new house, changed password): open setup, keep retrying it
+    Serial.println("[boot] saved Wi-Fi unreachable, opening setup hotspot");
+    setMode(Mode::PROVISIONING);
+    net_start_portal();
+    net_boot_counter_clear_later();
+    return;
+  }
   configTzTime(net_tz().c_str(), "pool.ntp.org", "time.google.com");
   Serial.printf("[boot] relay_init (internal free %u, largest %u)\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   relay_init(net_relay_url(), net_device_token());

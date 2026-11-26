@@ -19,7 +19,7 @@ the assistant is called **Charlie**, a chief of staff.
 - **Alarms:** "wake me at 6:30". Alarms are kept on the board across reboots. It chimes until you tap, then Charlie
   says good morning with the time and weather.
 - **Watch faces:** swipe left or right to switch the eyes for a dive chronograph, a UH-1 Huey-style countdown timer
-  ("set a timer for 12 minutes"), a Huey fuel-gauge-style "talk quantity" gauge (voice minutes left today) and a
+  ("set a timer for 12 minutes"), a Huey fuel-gauge-style "talk quantity" gauge (voice minutes left today), a
   '67 big-block stinger-hood clock, and a Huey caution panel that sits dark until an alarm or timer lights it: tap MASTER CAUTION to reset.
   The dial art is baked by `tools/make_face_assets.py`; hands and digits are drawn live (`faces.cpp`).
 - **Volume:** 10 levels, saved on the board. Swipe up or down on the screen, say "turn it down", or use the upper side
@@ -62,6 +62,9 @@ the assistant is called **Charlie**, a chief of staff.
 2. **Firmware.** Follow `firmware/grok_sphere/README_BUILD.md`: `RELAY_URL=wss://<your relay>/ws ./make_secrets.sh`,
    build with arduino-cli, then flash.
 3. **Wi-Fi:** `tools/sphere-wifi.sh`. It prompts for the network name and a hidden password and sends them over USB.
+   Or with no cable: if the sphere has no Wi-Fi saved, or can't reach the saved network for 20 s at boot, it opens a
+   `Charlie-XXXX` hotspot. Join it on a phone and pick your network from the list. It keeps retrying the saved network
+   meanwhile and restarts normally if that comes back. Unplugging and plugging in 3 times quickly also opens setup.
 4. **Case:** print the body, bezel and base (see `case/README.md`). Assemble with the USB-C at 6 o'clock.
 
 ## Wake word

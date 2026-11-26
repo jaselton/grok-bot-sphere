@@ -4,7 +4,8 @@ bool   net_boot_counter_check();        // increments NVS counter; true if >= BO
 void   net_boot_counter_clear_later();  // arm a one-shot timer that zeroes the counter after BOOT_COUNT_WINDOW_MS
 void   net_wipe_wifi();
 bool   net_has_credentials();
-void   net_start_portal();              // SoftAP "GrokSphere-XXXX" + captive DNS + form
+void   net_start_portal();              // SoftAP "Charlie-XXXX" + captive DNS + form (network picker); keeps retrying saved Wi-Fi
+bool   net_connected();
 void   net_connect_blocking(uint32_t ms);
 void   net_loop();
 String net_relay_url();                 // e.g. wss://grok-sphere-relay.<acct>.workers.dev/ws
