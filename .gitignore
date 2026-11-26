@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+.dev.vars
+build/
+secrets.h
+wake_model.h
+*.tflite
+.DS_Store

@@ -1,0 +1,45 @@
+name = "grok-sphere-relay"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[observability]
+enabled = true
+
+# Secrets (set by John, never committed):
+#   npx wrangler secret put XAI_API_KEY
+#   npx wrangler secret put DEVICE_TOKENS      # comma-separated
+# Optional, to let Charlie hand tasks to the owner's own Grok Bot (all three, or the tool stays off):
+#   npx wrangler secret put GROKBOT_WEBHOOK_URL   # the routine's webhook "POST to" URL
+#   npx wrangler secret put GROKBOT_WEBHOOK_KEY   # the routine's key (sent as Authorization: Bearer)
+#   npx wrangler secret put BOT_TOKEN             # random; the routine sends it back when posting results to /result
+[vars]
+XAI_MODEL = "grok-voice-3.0"      # pinned; grok-voice-latest is an alias that can move
+XAI_VOICE = "eve"
+XAI_REASONING = "none"            # fastest spoken turns
+MAX_SESSION_SECONDS = "120"       # one wake = one answer; hard cap per xAI session
+NO_SPEECH_SECONDS = "8"           # false wake: close if nobody speaks
+DAILY_MINUTES = "30"              # xAI session minutes per day ($0.08/min => max $2.40/day)
+TIMEZONE = "America/Chicago"
+HOME_LAT = "30.2672"              # your home latitude (weather); example: Austin, TX
+HOME_LON = "-97.7431"             # your home longitude
+ASSISTANT_NAME = "Charlie"
+OWNER_NAME = "the boss"           # how the assistant refers to its owner
+HOME_PLACE = "Austin, Texas"      # spoken place name for time/weather
+TASKS_PER_HOUR = "20"             # Grok Bot hand-offs (each starts a run on the owner's plan)
+
+[[durable_objects.bindings]]
+name = "BUDGET"
+class_name = "Budget"      # v1 budget (legacy, unused)
+
+[[durable_objects.bindings]]
+name = "DEVICE"
+class_name = "Device"      # device session + budget + alarms mirror + Grok Bot results
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Budget"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Device"]

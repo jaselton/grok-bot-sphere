@@ -1,0 +1,12 @@
+Grok Bot Sphere build
+Copyright 2026 jaselton and contributors. Licensed under the Apache License, Version 2.0.
+
+This project includes third-party code:
+- Waveshare ESP32-S3-Touch-LCD-1.85C drivers (Display_ST77916, Touch_CST816, TCA9554PWR, I2C_Driver, LVGL_Driver,
+  esp_lcd_st77916, es8311, es7210) from https://github.com/waveshareteam/ESP32-S3-Touch-LCD-1.85C (Apache-2.0).
+- TensorFlow Lite Micro audio frontend (firmware/grok_sphere/src/microfrontend) (Apache-2.0, The TensorFlow Authors).
+- KISS FFT (firmware/grok_sphere/kissfft_inc) (BSD-3-Clause, Mark Borgerding).
+- wake_tflm.cpp and the 48 kHz audio recipe are adapted from https://github.com/jaselton/mosaico-grok-buddy (Apache-2.0).
+
+Unofficial fan project. Not affiliated with or endorsed by xAI or Waveshare. "Grok" and "Grok Bot" are trademarks of
+their owners. The Grok Bot Sphere look is inspired by @Texas_Twins_Dad's renders.
