@@ -21,11 +21,11 @@ extern "C" {
 
 static const char* TAG = "audio";
 
-// ---- volume: 5 levels (ES8311 0-100 scale), saved in NVS; side button / voice / serial step it ----
+// ---- volume: 10 levels (ES8311 0-100 scale), saved in NVS; swipe / side button / voice / serial step it ----
 #include <Preferences.h>
-static const int VOLUME_LEVELS[] = { 45, 55, 65, 75, 85 };   // ~3 dB apart; default level 2 (65) is quieter than before (80)
+static const int VOLUME_LEVELS[] = { 35, 41, 47, 53, 59, 65, 71, 77, 83, 90 };   // ~1.5 dB apart; default level 6 (65)
 static const int VOLUME_COUNT = sizeof(VOLUME_LEVELS) / sizeof(VOLUME_LEVELS[0]);
-static int volLevel = 2;
+static int volLevel = 5;
 static es8311_handle_t spk = nullptr;
 
 // ES8311 (speaker DAC) setup, from Waveshare demo 03_audio_out_no_tf, at our 16 kHz rate.
@@ -195,13 +195,13 @@ static void mic_task(void*) {
     }
   }
 }
-static void volume_load() { Preferences p; p.begin("audio", true); volLevel = constrain((int)p.getUChar("vol", 2), 0, VOLUME_COUNT - 1); p.end(); }
+static void volume_load() { Preferences p; p.begin("audio", true); volLevel = constrain((int)p.getUChar("vol10", 5), 0, VOLUME_COUNT - 1); p.end(); }   // "vol10": new key (old "vol" was 5 levels)
 int audio_volume_level() { return volLevel; }
 int audio_volume_levels() { return VOLUME_COUNT; }
 void audio_set_volume_level(int lvl, bool chime) {
   volLevel = constrain(lvl, 0, VOLUME_COUNT - 1);
   if (spk) es8311_voice_volume_set(spk, VOLUME_LEVELS[volLevel], NULL);
-  Preferences p; p.begin("audio", false); p.putUChar("vol", volLevel); p.end();
+  Preferences p; p.begin("audio", false); p.putUChar("vol10", volLevel); p.end();
   Serial.printf("[audio] volume level %d/%d (%d)\n", volLevel + 1, VOLUME_COUNT, VOLUME_LEVELS[volLevel]);
   if (chime) audio_chime(2);
 }

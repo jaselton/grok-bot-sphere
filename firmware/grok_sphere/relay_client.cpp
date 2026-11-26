@@ -31,7 +31,7 @@ static void onEvent(WStype_t t, uint8_t* p, size_t len) {
       if (d["volume"].is<JsonObject>()) {
         const char* op = d["volume"]["op"] | "";
         int lvl = audio_volume_level();
-        if (!strcmp(op, "up")) lvl++; else if (!strcmp(op, "down")) lvl--; else if (!strcmp(op, "set")) lvl = (d["volume"]["level"] | 3) - 1;
+        if (!strcmp(op, "up")) lvl++; else if (!strcmp(op, "down")) lvl--; else if (!strcmp(op, "set")) lvl = (d["volume"]["level"] | 6) - 1;
         audio_set_volume_level(lvl, false);
       }
       if (d["alarm"].is<JsonObject>()) { alarms_apply(d["alarm"]["op"] | "", d["alarm"]["time"] | "", d["alarm"]["label"] | ""); relay_send_alarms(); }
