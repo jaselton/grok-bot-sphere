@@ -11,4 +11,5 @@ void ui_show_card(uint32_t ms);   // clock/weather card for a few seconds
 void ui_alarm(bool ringing, const char* label);   // alarm card + amber ring
 void ui_show_face(int face);    // switch the idle face (FaceId in faces.h), e.g. the timer when one starts
 void ui_set_talk_left(float minutes, float limit);   // Huey talk gauge
+void ui_banner(const char* text);   // status text under the eyes (e.g. UPDATING)
 int  ui_swipe();                // +1 swipe up, -1 swipe down, 0 none (consumed)

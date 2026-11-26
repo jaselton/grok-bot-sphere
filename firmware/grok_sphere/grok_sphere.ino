@@ -14,6 +14,7 @@
 #include "relay_client.h"
 #include "alarms.h"
 #include "faces.h"
+#include "ota.h"
 
 enum class Mode { PROVISIONING, CONNECTING, IDLE, LISTENING, THINKING, SPEAKING, ERROR_ };
 volatile Mode mode = Mode::IDLE;
@@ -151,6 +152,16 @@ void loop() {
         audio_set_volume_level(lvl, true);
       }
     }
+  }
+  ota_mark_good_if_due(g_ws_connected);
+  if (ota_pending() && mode == Mode::IDLE && !alarmRinging && !faces_timer_running()) {   // update only when nobody's using it
+    ui_set_state(UI_THINKING); ui_banner("UPDATING"); wake_pause(); relay_disconnect();
+    delay(200);                  // let UPDATING reach the screen, then freeze LVGL: a display SPI interrupt during a
+    lvgl_port_lock(0);           // flash write (cache off) crashes the chip, so no screen transfers while we write
+    delay(60);                   // any flush already in flight finishes
+    ota_run(net_relay_url(), net_device_token());   // restarts on success
+    lvgl_port_unlock();
+    ui_banner(""); setMode(Mode::IDLE); wake_resume();
   }
   ui_loop();                     // clock/weather refresh, idle blinking schedule
   if (ui_tapped()) handle_tap(); // tap: dismiss alarm / interrupt / talk

@@ -10,6 +10,8 @@
 #include <ArduinoJson.h>
 #include "alarms.h"
 #include "faces.h"
+#include "ota.h"
+#include "config.h"
 
 extern void onRelayState(const char*);
 static WebSocketsClient ws;
@@ -22,7 +24,7 @@ bool g_ws_connected = false;
 static void onEvent(WStype_t t, uint8_t* p, size_t len) {
   switch (t) {
     case WStype_CONNECTED: g_ws_connected = true; Serial.println("[relay] connected");
-      ws.sendTXT("{\"t\":\"hello\",\"fw\":\"0.4\"}"); relay_send_alarms(); relay_send_timer(); break;
+      ws.sendTXT("{\"t\":\"hello\",\"fw\":\"" FW_VERSION "\"}"); relay_send_alarms(); relay_send_timer(); break;
     case WStype_BIN:       g_ws_rx_bin += len; if (!dropRx) audio_play((const int16_t*)p, len / 2); break;
     case WStype_FRAGMENT_BIN_START: case WStype_FRAGMENT: case WStype_FRAGMENT_FIN: g_ws_frag++; break;
     case WStype_TEXT: { g_ws_rx_txt++; Serial.printf("[relay] %.*s\n", (int)min<size_t>(len, 120), (const char*)p);
@@ -42,6 +44,7 @@ static void onEvent(WStype_t t, uint8_t* p, size_t len) {
         else if (!strcmp(op, "cancel")) faces_timer_cancel();
         relay_send_timer();
       }
+      if (d["ota"].is<JsonObject>()) ota_offer(d["ota"]["version"] | "", d["ota"]["size"] | 0u, d["ota"]["md5"] | "");
       if (d["usage"].is<JsonObject>()) ui_set_talk_left(d["usage"]["left"] | -1.0f, d["usage"]["limit"] | 30.0f);
       if (d["card"].is<const char*>())  ui_show_card(6000);
       if (d["wx"].is<const char*>())    ui_set_weather(d["wx"], d["f"] | 0);
@@ -73,6 +76,7 @@ void relay_greet(const String& label) {
   if (!ws.isConnected()) return;
   JsonDocument d; d["t"] = "greet"; d["reason"] = "alarm"; d["label"] = label; String m; serializeJson(d, m); ws.sendTXT(m);
 }
+void relay_disconnect() { ws.disconnect(); g_ws_connected = false; }
 void relay_end_turn()   { streaming = false; audio_mic_stream(false); }
 void relay_loop() {
   ws.loop();

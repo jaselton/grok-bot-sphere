@@ -8,3 +8,4 @@ void relay_cancel();        // tap while Charlie talks: stop now, drop late audi
 void relay_send_alarms();   // tell the relay which alarms are set
 void relay_greet(const String& label);   // after an alarm is dismissed: Charlie says good morning
 void relay_send_timer();    // tell the relay how long is left on the countdown timer
+void relay_disconnect();    // before an OTA download (frees the TLS session); it reconnects by itself

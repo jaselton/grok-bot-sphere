@@ -36,6 +36,7 @@
 #define EYE_LINE_DEG   25.0f   // eye line rises to the right
 
 // ---- Device config (stored in NVS, set via captive portal) ----
+#define FW_VERSION "0.6"          // reported in hello; the relay offers OTA images newer than this
 #define PORTAL_SSID_PREFIX "Charlie-"
 #define BOOT_COUNT_RESET   3       // 3 quick power cycles => wipe Wi-Fi + reopen portal
 #define BOOT_COUNT_WINDOW_MS 8000  // a boot counts as "quick" if we are powered off again within this

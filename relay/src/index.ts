@@ -19,11 +19,15 @@
 //
 // Routes: GET /health, GET /usage (device token), GET /ws (device token, WebSocket),
 //         POST /result (BOT_TOKEN: the owner's Grok Bot posts {request_id, status, spoken_text}).
+//         POST /fw (OTA_TOKEN, header x-fw-version: firmware image for over-the-air update), GET /fw (OTA_TOKEN: status),
+//         GET /fw/bin (device token: the image). The relay offers {"ota":{version,size,md5}} on hello when it holds a
+//         newer version than the device reports; the device downloads it while idle (firmware/grok_sphere/ota.cpp).
 import { DurableObject } from "cloudflare:workers";
 import { persona, Who } from "./persona";
 
 export interface Env {
   XAI_API_KEY: string; DEVICE_TOKENS: string;                       // secrets
+  OTA_TOKEN?: string;                                               // optional secret: firmware uploads
   BOT_TOKEN?: string; GROKBOT_WEBHOOK_URL?: string; GROKBOT_WEBHOOK_KEY?: string;   // optional secrets (Grok Bot hand-off)
   XAI_MODEL: string; XAI_VOICE: string; XAI_REASONING: string;
   MAX_SESSION_SECONDS: string; NO_SPEECH_SECONDS: string; DAILY_MINUTES: string;
@@ -38,6 +42,15 @@ const IN_RATE = 16000;                  // device mic -> xAI
 const DEVICE_FRAME_BYTES = 2048;        // the ESP32 WebSocket client drops frames over ~15 KB
 const LEAD_MS = 1200;                   // how far ahead of real time the sphere may be (its jitter buffer starts at 500 ms)
 const MAX_TEXT = 2000;
+const FW_MAX = 0x300000;                // app partition size
+const FW_CHUNK = 512 * 1024;            // Durable Object storage value limit is well above this
+
+function newer(a: string, b: string): boolean {   // dotted numeric versions: "0.10" > "0.9"
+  const pa = a.split(".").map(Number), pb = (b || "0").split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const x = pa[i] || 0, y = pb[i] || 0; if (x !== y) return x > y; }
+  return false;
+}
+type FwMeta = { version: string; size: number; md5: string; chunks: number; at: string };
 
 function safeEqual(a: string, b: string): boolean {
   if (!a || !b) return false;
@@ -135,6 +148,9 @@ export class Device extends DurableObject<Env> {
       return Response.json({ daily_limit_minutes: Number(this.env.DAILY_MINUTES || "30"), minutes_used: minutes });
     }
     if (url.pathname === "/result") return this.onBotResult(await req.json());
+    if (url.pathname === "/fw" && req.method === "POST") return this.putFirmware(req);
+    if (url.pathname === "/fw") return Response.json({ stored: (await this.ctx.storage.get<FwMeta>("fw:meta")) ?? null, device_fw: (await this.ctx.storage.get<string>("deviceFw")) ?? null });
+    if (url.pathname === "/fw/bin") return this.getFirmware();
     return new Response("not found", { status: 404 });
   }
 
@@ -148,7 +164,10 @@ export class Device extends DurableObject<Env> {
       return;
     }
     let m: any; try { m = JSON.parse(msg); } catch { return; }
-    if (m.t === "hello") { await this.sendUsage(); await this.deliverQueuedResult(); }
+    if (m.t === "hello") {
+      if (typeof m.fw === "string") await this.ctx.storage.put("deviceFw", m.fw.slice(0, 16));
+      await this.sendUsage(); await this.offerFirmware(); await this.deliverQueuedResult();
+    }
     else if (m.t === "timer") await this.ctx.storage.put("timerEnds", Number(m.left) > 0 ? Date.now() + Number(m.left) * 1000 : 0);
     else if (m.t === "cancel") { if (this.xai) this.closeUpstream("cancelled"); else if (this.outQ.length) { this.dropAudio(); this.idleWhenDrained = false; this.state("idle"); } }   // tap: stop now
     else if (m.t === "alarms" && Array.isArray(m.list)) await this.ctx.storage.put("alarms", m.list.slice(0, 20));
@@ -159,6 +178,47 @@ export class Device extends DurableObject<Env> {
   }
   async webSocketClose() { this.closeUpstream("device_closed"); }
   async webSocketError() { this.closeUpstream("device_error"); }
+
+  // ---------- over-the-air firmware ----------
+  private async putFirmware(req: Request): Promise<Response> {
+    const version = (req.headers.get("x-fw-version") || "").trim();
+    if (!/^\d+(\.\d+){0,3}$/.test(version)) return new Response("x-fw-version must look like 0.5", { status: 400 });
+    const buf = new Uint8Array(await req.arrayBuffer());
+    if (buf.byteLength < 65536 || buf.byteLength > FW_MAX || buf[0] !== 0xE9) return new Response("not an ESP32 app image", { status: 400 });
+    const md5 = [...new Uint8Array(await crypto.subtle.digest("MD5", buf))].map(b => b.toString(16).padStart(2, "0")).join("");
+    const old = await this.ctx.storage.get<FwMeta>("fw:meta");
+    const chunks = Math.ceil(buf.byteLength / FW_CHUNK);
+    await this.ctx.storage.delete("fw:meta");                       // no half-written image is ever offered
+    for (let i = 0; i < chunks; i++) await this.ctx.storage.put("fw:" + i, buf.slice(i * FW_CHUNK, (i + 1) * FW_CHUNK));
+    for (let i = chunks; old && i < old.chunks; i++) await this.ctx.storage.delete("fw:" + i);
+    const meta: FwMeta = { version, size: buf.byteLength, md5, chunks, at: new Date().toISOString() };
+    await this.ctx.storage.put("fw:meta", meta);
+    console.log(JSON.stringify({ ev: "fw_stored", version, size: meta.size, md5 }));
+    await this.offerFirmware();                                     // device online: it updates as soon as it's idle
+    return Response.json(meta);
+  }
+  private async offerFirmware() {
+    const meta = await this.ctx.storage.get<FwMeta>("fw:meta");
+    const dev = (await this.ctx.storage.get<string>("deviceFw")) ?? "0";
+    if (meta && newer(meta.version, dev)) this.send(JSON.stringify({ ota: { version: meta.version, size: meta.size, md5: meta.md5 } }));
+  }
+  private async getFirmware(): Promise<Response> {
+    const meta = await this.ctx.storage.get<FwMeta>("fw:meta");
+    if (!meta) return new Response("no firmware", { status: 404 });
+    const storage = this.ctx.storage; let i = 0;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(c) {
+        if (i >= meta.chunks) { c.close(); return; }
+        const part = await storage.get<Uint8Array>("fw:" + i++);
+        if (!part) { c.error(new Error("missing chunk")); return; }
+        c.enqueue(new Uint8Array(part));
+      },
+    });
+    console.log(JSON.stringify({ ev: "fw_download", version: meta.version }));
+    const fixed = new FixedLengthStream(meta.size);                 // sends a real Content-Length (not chunked)
+    body.pipeTo(fixed.writable).catch(() => {});
+    return new Response(fixed.readable, { headers: { "content-type": "application/octet-stream", "x-fw-version": meta.version } });
+  }
 
   // ---------- budget ----------
   private async remainingSecs(): Promise<number> {
@@ -400,6 +460,15 @@ export default {
     if (url.pathname === "/result" && req.method === "POST") {
       if (!env.BOT_TOKEN || !safeEqual(bearer(req), env.BOT_TOKEN)) return new Response("unauthorized", { status: 401 });
       if (Number(req.headers.get("content-length") || 0) > 16384) return new Response("too large", { status: 413 });
+      return device().fetch(req);
+    }
+    if (url.pathname === "/fw") {
+      if (!env.OTA_TOKEN || !safeEqual(bearer(req), env.OTA_TOKEN)) return new Response("unauthorized", { status: 401 });
+      if (req.method === "POST" && Number(req.headers.get("content-length") || 0) > FW_MAX) return new Response("too large", { status: 413 });
+      return device().fetch(req);
+    }
+    if (url.pathname === "/fw/bin") {
+      if (!deviceTokenOk(env, url.searchParams.get("token"))) return new Response("unauthorized", { status: 401 });
       return device().fetch(req);
     }
     return new Response("not found", { status: 404 });

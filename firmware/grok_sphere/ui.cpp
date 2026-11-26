@@ -230,3 +230,5 @@ void ui_alarm(bool ring, const char* label) {
 }
 void ui_show_face(int f) { LvLock lk; if (f >= 0 && f < FACE_COUNT) { face = f; apply_view(); } }
 void ui_set_talk_left(float minutes, float limit) { LvLock lk; faces_set_talk_left(minutes, limit); }
+
+void ui_banner(const char* text) { LvLock lk; lv_label_set_text(lblTitle, text); }

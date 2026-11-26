@@ -9,8 +9,15 @@ S=$PWD; arduino-cli compile -b <FQBN> \
   --build-property "compiler.cpp.extra_flags=-DLV_CONF_INCLUDE_SIMPLE -I$S -I$S/src/microfrontend -I$S/kissfft_inc" \
   --build-property "compiler.c.extra_flags=-DLV_CONF_INCLUDE_SIMPLE -I$S -I$S/src/microfrontend -I$S/kissfft_inc" \
   --output-dir ../build $S
+esptool --port /dev/cu.usbmodemXXXX -b 921600 erase-region 0xe000 0x2000   # otadata: boot app0 again after an OTA
 esptool --port /dev/cu.usbmodemXXXX -b 921600 write-flash 0x10000 ../build/grok_sphere.ino.bin
 ```
+
+**Over the air** (no cable): bump `FW_VERSION` in `config.h`, build, then `./ota_push.sh`. It uploads the image to
+the relay (needs `OTA_TOKEN`: Keychain service `charlie-relay-ota` here, and `wrangler secret put OTA_TOKEN` on the
+relay). The sphere is offered it on its next connect, downloads it while idle ("UPDATING" under the eyes, about
+30 s), checks the MD5 and restarts. A new image that crashes before it reaches the relay (or 2 minutes of uptime) is
+rolled back by the bootloader. After any OTA, a USB flash needs the `erase-region` line above.
 
 Libraries: lvgl 9.3.0, ArduinoJson 7, WebSockets 2.7, ESP_TF 2.1.2 (TFLite Micro + ESP-NN).
 **ESP_TF needs `dot_a_linkage=false`** in its library.properties (local edit): as an archive, members collide by
@@ -19,4 +26,4 @@ basename (two `common.cc`, two `kernel_util.cc`) and the link fails with undefin
 The wake-word model (`wake_model.h`) must never be committed: its training data is non-commercial.
 
 Serial debug commands: TALK, TAP, RING, TONE, CHIME, MIC, MICDUMP, AUDIO?, WIFI?, WIFI-FORGET, PORTAL-TEST, WAKE?, CUTOFF x,
-WAKETEST ON|OFF, TIMER secs, FACE n (0 eyes 1 dive 2 timer 3 talk 4 stinger), TALKLEFT min, SHOT (canvas dump; see tools/face_shots.py). Speaker test: `~/dev/sphere-185/tools/wake_speaker_test.py "hey charlie"`.
+WAKETEST ON|OFF, TIMER secs, FACE n (0 eyes 1 dive 2 timer 3 talk 4 stinger 5 caution), TALKLEFT min, SHOT (canvas dump; see tools/face_shots.py). Speaker test: `~/dev/sphere-185/tools/wake_speaker_test.py "hey charlie"`.
